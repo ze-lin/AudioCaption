@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import torch
 import h5py
+from panns_inference import labels
+label2idx = {x:i for i,x in enumerate(labels)}
 
 from captioning.utils.build_vocab import Vocabulary
 
@@ -15,7 +17,8 @@ class CaptionEvalDataset(torch.utils.data.Dataset):
                  raw_audio_to_h5: Dict,
                  fc_audio_to_h5: Dict,
                  attn_audio_to_h5: Dict,
-                 transform: Optional[List] = None):
+                 transform: Optional[List] = None,
+                 **kwargs):
         """audio captioning dataset object for inference and evaluation
 
         Args:
@@ -37,6 +40,7 @@ class CaptionEvalDataset(torch.utils.data.Dataset):
             self.fc_feat_dim = store[first_audio_id].shape[-1]
         with h5py.File(self._attn_audio_to_h5[first_audio_id], 'r') as store:
             self.attn_feat_dim = store[first_audio_id].shape[-1]
+        self._label_info = kwargs.get("label_info", None)
 
     def __getitem__(self, index):
         audio_id = self._audio_ids[index]
@@ -59,6 +63,13 @@ class CaptionEvalDataset(torch.utils.data.Dataset):
         if self._transform:
             for transform in self._transform:
                 raw_feat = transform(raw_feat)
+
+        if self._label_info:
+            label_text = self._label_info[audio_id]
+            label_idxs = [label2idx[x] for x in label_text]
+            labels = torch.zeros(527).scatter_(0, torch.tensor(label_idxs), 1) 
+            return audio_id, torch.as_tensor(raw_feat), torch.as_tensor(fc_feat), torch.as_tensor(attn_feat), labels
+
         return audio_id, torch.as_tensor(raw_feat), torch.as_tensor(fc_feat), torch.as_tensor(attn_feat)
 
     def __len__(self):
@@ -110,15 +121,43 @@ class CaptionDataset(CaptionEvalDataset):
             [self._vocabulary(token) for token in tokens] + \
             [self._vocabulary('<end>')]
         caption = torch.as_tensor(caption)
-        return raw_feat, fc_feat, attn_feat, caption, audio_id, cap_id
+        return raw_feat, fc_feat, attn_feat, caption, audio_id, cap_id 
 
     def __len__(self):
         length = 0
         for audio_item in self._caption_info:
             length += len(audio_item["captions"])
         return length
+ 
+class CaptionLabelDataset(CaptionDataset):
 
+    def __init__(self,
+                 raw_audio_to_h5: Dict,
+                 fc_audio_to_h5: Dict,
+                 attn_audio_to_h5: Dict,
+                 caption_info: List,
+                 vocabulary: Vocabulary,
+                 transform: Optional[List] = None):
+        """Dataloader for audio captioning dataset
 
+        Args:
+            h5file_dict (Dict): Dictionary (<audio_id>: <hdf5_path>)
+            vocabulary (Vocabulary): Preloaded vocabulary object 
+            transform (List, optional): Defaults to None. Transformation onto the data (List of function)
+        """
+        super().__init__(raw_audio_to_h5, fc_audio_to_h5, attn_audio_to_h5, caption_info, vocabulary, transform)
+
+    def __getitem__(self, index: Tuple):
+        """
+        index: Tuple (<audio_idx>, <cap_idx>)
+        """
+        audio_idx, cap_idx = index
+        label_text = self._caption_info[audio_idx]["labels"]
+        label_idxs = [label2idx[x] for x in label_text]
+        labels = torch.zeros(527).scatter_(0, torch.tensor(label_idxs), 1) 
+        raw_feat, fc_feat, attn_feat, caption, audio_id, cap_id = super().__getitem__(index)
+        return raw_feat, fc_feat, attn_feat, caption, audio_id, cap_id, labels 
+       
 class CaptionConditionDataset(CaptionDataset):
 
     def __init__(self,
@@ -392,17 +431,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'feature_csv',
-        default='data/clotho_v2/dev/lms.csv',
+        default='data/clotho_v1/dev/lms.csv',
         type=str,
         nargs="?")
     parser.add_argument(
         'vocab_file',
-        default='data/clotho_v2/dev/vocab.pkl',
+        default='data/clotho_v1/dev/vocab.pkl',
         type=str,
         nargs="?")
     parser.add_argument(
         'annotation_file',
-        default='data/clotho_v2/dev/text.json',
+        default='data/clotho_v1/dev/text.json',
         type=str,
         nargs="?")
     args = parser.parse_args()

@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 
 from captioning.models.utils import mean_with_lens, repeat_tensor
+from .encoder import LabelEncoder
 
 class CaptionModel(nn.Module):
     """
@@ -21,6 +22,7 @@ class CaptionModel(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
+        
         self.vocab_size = decoder.vocab_size
         self.train_forward_keys = ["caps", "cap_lens", "ss_ratio"]
         self.inference_forward_keys = ["sample_method", "max_length", "temp"]
@@ -29,7 +31,10 @@ class CaptionModel(nn.Module):
             for param in self.encoder.parameters():
                 param.requires_grad = False
         self.check_decoder_compatibility()
-
+        self.use_label = kwargs.get("use_label", False)
+        if self.use_label:
+            self.label_encoder = LabelEncoder(decoder.attn_emb_dim, 527)
+        
     def check_decoder_compatibility(self):
         assert isinstance(self.decoder, self.compatible_decoders), \
             f"{self.decoder.__class__.__name__} is incompatible with {self.__class__.__name__}, please use decoder in {self.compatible_decoders} "
@@ -68,14 +73,27 @@ class CaptionModel(nn.Module):
         encoder_input_keys = ["raw_feats", "raw_feat_lens", "fc_feats", "attn_feats", "attn_feat_lens"]
         encoder_input = { key: input_dict[key] for key in encoder_input_keys }
         encoder_output_dict = self.encoder(encoder_input)
+        # 从这里开始写加入label的代码
+        forward_dict = {}
+        if self.use_label:
+            forward_dict["labels"] = self.label_encoder(input_dict["labels"])
+            # import pdb; pdb.set_trace()
+            # concat_embs = torch.cat( (encoder_output_dict["attn_embs"], \
+            #                           forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)), -1)
+            # forward_dict["attn_embs"] = concat_embs
+            add_embs =  encoder_output_dict["attn_embs"] + \
+                        forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)
+            forward_dict["attn_embs"] = add_embs
+            encoder_output_dict.pop("attn_embs")
+        
         if input_dict["mode"] == "train":
-            forward_dict = { "mode": "train", "sample_method": "greedy", "temp": 1.0 }
+            forward_dict.update({ "mode": "train", "sample_method": "greedy", "temp": 1.0 })
             for key in self.train_forward_keys:
                 forward_dict[key] = input_dict[key]
             forward_dict.update(encoder_output_dict)
             output = self.train_forward(forward_dict)
         elif input_dict["mode"] == "inference":
-            forward_dict = {"mode": "inference"}
+            forward_dict.update({"mode": "inference"})
             default_args = { "sample_method": "greedy", "max_length": self.max_length, "temp": 1.0 }
             for key in self.inference_forward_keys:
                 if key in input_dict:
@@ -117,6 +135,7 @@ class CaptionModel(nn.Module):
         return output
 
     def train_forward(self, input_dict):
+        # import pdb; pdb.set_trace()
         if input_dict["ss_ratio"] != 1: # scheduled sampling training
             input_dict["mode"] = "train"
             return self.stepwise_forward(input_dict)

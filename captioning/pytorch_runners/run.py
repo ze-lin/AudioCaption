@@ -54,7 +54,8 @@ class Runner(BaseRunner):
                                              outputfun)
         model = getattr(
             captioning.models, config["model"])(
-            encoder, decoder, **config["model_args"]
+            encoder, decoder, use_label=config["use_label"], **config["model_args"]
+                                # 这里可以改成config["use_label"]
         )
         if "pretrained" in config:
             train_util.load_pretrained_model(model,
@@ -64,6 +65,7 @@ class Runner(BaseRunner):
 
     def _forward(self, model, batch, mode, **kwargs):
         assert mode in ("train", "validation", "eval")
+        use_label=kwargs.get("use_label", False)
 
         if mode == "train":
             raw_feats = batch[0]
@@ -73,24 +75,33 @@ class Runner(BaseRunner):
             raw_feat_lens = batch[-3]
             attn_feat_lens = batch[-2]
             cap_lens = batch[-1]
+            if use_label:
+                labels = batch[6]
         else:
             raw_feats = batch[1]
             fc_feats = batch[2]
             attn_feats = batch[3]
             raw_feat_lens = batch[-2]
             attn_feat_lens = batch[-1]
+            if use_label:
+                labels = batch[4]
 
         raw_feats = raw_feats.float().to(self.device)
         fc_feats = fc_feats.float().to(self.device)
         attn_feats = attn_feats.float().to(self.device)
+
         input_dict = {
             "mode": "train" if mode == "train" else "inference",
             "raw_feats": raw_feats,
             "raw_feat_lens": raw_feat_lens,
             "fc_feats": fc_feats,
             "attn_feats": attn_feats,
-            "attn_feat_lens": attn_feat_lens
+            "attn_feat_lens": attn_feat_lens,
         }
+        # import pdb; pdb.set_trace()
+        if use_label:
+            labels = labels.to(self.device)
+            input_dict["labels"] = labels
 
         if mode == "train":
             caps = caps.long().to(self.device)
@@ -276,7 +287,8 @@ class Runner(BaseRunner):
                     #########################
                     optimizer.zero_grad()
                     output = self._forward(model, batch, "train",
-                                           ss_ratio=self.ss_ratio)
+                                           use_label=conf["use_label"], ss_ratio=self.ss_ratio)
+                                           # 可以改成conf["use_label"]
                     loss = loss_fn(output)
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 
@@ -311,7 +323,8 @@ class Runner(BaseRunner):
                                        ascii=True) as pbar:
                 for batch in val_dataloader:
                     output = self._forward(model, batch, "validation",
-                                           sample_method="beam", beam_size=3)
+                                           use_label=conf["use_label"], sample_method="beam", beam_size=3)
+                                           # 可以改成conf["use_label"]
                     keys = batch[0]
                     seqs = output["seqs"].cpu().numpy()
                     for (idx, seq) in enumerate(seqs):
@@ -319,7 +332,7 @@ class Runner(BaseRunner):
                             seq, vocabulary.idx2word, zh)
                         key2pred[keys[idx]] = [candidate,]
                     pbar.update()
-            scorer = Cider(zh=zh)
+            scorer = Cider()
             score_output = self._eval_prediction(val_key2refs, key2pred, [scorer])
             score = score_output["CIDEr"]
 

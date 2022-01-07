@@ -35,6 +35,31 @@ class BaseEncoder(nn.Module):
         #########################
         raise NotImplementedError
 
+class LabelEncoder(nn.Module):
+    """
+    Encode the Label information in AudioCaps and AudioSet
+    """
+    def __init__(self, emb_dim, vocab_size=527):
+        super(LabelEncoder, self).__init__()
+        self.label_embedding = nn.Parameter(torch.randn((vocab_size, emb_dim)),requires_grad=True)
+        # self.register_parameter('label_embeddinng', self.label_embedding)
+        
+    def forward(self, word_idxs):
+        embeddings = (word_idxs / word_idxs.sum(dim=1, keepdim=True)) @ self.label_embedding 
+        return embeddings
+
+class LabelEncoder2(nn.Module):
+    """
+    Encode the Label information in AudioCaps and AudioSet
+    """
+    def __init__(self, emb_dim, vocab_size=527):
+        super(LabelEncoder, self).__init__()
+        self.label_embedding = nn.Embedding(vocab_size, emb_dim)
+    
+    def forward(self, word_idxs):
+        embeddings = self.label_embedding(word_idxs)
+        return embeddings
+
 
 class Block2D(nn.Module):
 

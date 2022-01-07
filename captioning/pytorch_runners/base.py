@@ -49,7 +49,7 @@ class BaseRunner(object):
             val_size = int(len(caption_info) * (1 - data_config["train_percent"] / 100.))
             val_audio_idxs = np.random.choice(len(caption_info), val_size, replace=False)
             train_audio_idxs = [idx for idx in range(len(caption_info)) if idx not in val_audio_idxs]
-            train_dataset = ac_dataset.CaptionDataset(
+            train_dataset = ac_dataset.CaptionLabelDataset(
                 raw_audio_to_h5,
                 fc_audio_to_h5,
                 attn_audio_to_h5,
@@ -67,10 +67,12 @@ class BaseRunner(object):
                 **config["dataloader_args"]
             )
             val_audio_ids = [caption_info[audio_idx]["audio_id"] for audio_idx in val_audio_idxs]
+            audio_id2labels = {caption_info[audio_idx]["audio_id"]:caption_info[audio_idx]["labels"] for audio_idx in val_audio_idxs}
             val_dataset = ac_dataset.CaptionEvalDataset(
                 {audio_id: raw_audio_to_h5[audio_id] for audio_id in val_audio_ids},
                 {audio_id: fc_audio_to_h5[audio_id] for audio_id in val_audio_ids},
                 {audio_id: attn_audio_to_h5[audio_id] for audio_id in val_audio_ids},
+                label_info=audio_id2labels
             )
             val_dataloader = torch.utils.data.DataLoader(
                 val_dataset,
@@ -102,7 +104,7 @@ class BaseRunner(object):
                 output["attn_audio_to_h5"] = dict(zip(attn_feat_df["audio_id"], attn_feat_df["hdf5_path"]))
                 output["caption_info"] = json.load(open(conf_split["caption_file"], "r"))["audios"]
 
-            train_dataset = ac_dataset.CaptionDataset(
+            train_dataset = ac_dataset.CaptionLabelDataset(
                 data["train"]["raw_audio_to_h5"],
                 data["train"]["fc_audio_to_h5"],
                 data["train"]["attn_audio_to_h5"],
@@ -119,10 +121,12 @@ class BaseRunner(object):
                 sampler=train_sampler,
                 **config["dataloader_args"]
             )
+            audio_id2labels = {audio["audio_id"]:audio["labels"] for audio in data["val"]["caption_info"]}
             val_dataset = ac_dataset.CaptionEvalDataset(
                 data["val"]["raw_audio_to_h5"],
                 data["val"]["fc_audio_to_h5"],
                 data["val"]["attn_audio_to_h5"],
+                label_info=audio_id2labels
             )
             val_dataloader = torch.utils.data.DataLoader(
                 val_dataset,
@@ -245,10 +249,15 @@ class BaseRunner(object):
         fc_audio_to_h5 = dict(zip(fc_feat_df["audio_id"], fc_feat_df["hdf5_path"]))
         attn_feat_df = pd.read_csv(attn_feat_csv, sep="\t")
         attn_audio_to_h5 = dict(zip(attn_feat_df["audio_id"], attn_feat_df["hdf5_path"]))
+        ### 加入label
+        caption_info=kwargs.get("caption_info", None)
+        audio_id2labels = {audio["audio_id"]:audio["labels"] for audio in caption_info}
+
         dataset = ac_dataset.CaptionEvalDataset(
             raw_audio_to_h5,
             fc_audio_to_h5,
-            attn_audio_to_h5
+            attn_audio_to_h5,
+            label_info=audio_id2labels
         )
         dataloader = torch.utils.data.DataLoader(
             dataset,
@@ -297,14 +306,14 @@ class BaseRunner(object):
         default_eval_data = {
             "clotho": {
                 "raw_feat_csv": "data/clotho_v2/eval/lms.csv",
-                "fc_feat_csv": "data/clotho_v2/eval/panns_cnn14_fc.csv",
-                "attn_feat_csv": "data/clotho_v2/eval/panns_cnn14_attn.csv",
+                "fc_feat_csv": "data/clotho_v2/eval/panns__fc.csv",
+                "attn_feat_csv": "data/clotho_v2/eval/panns_attn.csv",
                 "caption_file": "data/clotho_v2/eval/text.json",
             },
             "audiocaps": {
                 "raw_feat_csv": "data/audiocaps/test/lms.csv",
-                "fc_feat_csv": "data/audiocaps/test/panns_cnn14_fc.csv",
-                "attn_feat_csv": "data/audiocaps/test/panns_cnn14_attn.csv",
+                "fc_feat_csv": "data/audiocaps/test/panns_fc.csv",
+                "attn_feat_csv": "data/audiocaps/test/panns_attn.csv",
                 "caption_file": "data/audiocaps/test/text.json"
             },
         }
@@ -318,6 +327,12 @@ class BaseRunner(object):
         # Previous training config
         config = train_util.parse_config_or_kwargs(experiment_path / "config.yaml")
         zh = config["zh"]
+        #### 注意这里调换了顺序提前获取gt
+        if caption_file is None:
+            caption_file = default_eval_data[task]["caption_file"]
+        # import pdb; pdb.set_trace()
+        captions = json.load(open(caption_file, "r"))["audios"]
+        
         key2pred = self.predict(experiment_path,
                                 save_type,
                                 raw_feat_csv,
@@ -325,10 +340,9 @@ class BaseRunner(object):
                                 attn_feat_csv,
                                 caption_output,
                                 return_pred=True,
+                                caption_info=captions,
                                 **kwargs)
-        if caption_file is None:
-            caption_file = default_eval_data[task]["caption_file"]
-        captions = json.load(open(caption_file, "r"))["audios"]
+        
         key2refs = {}
         for audio_idx in range(len(captions)):
             audio_id = captions[audio_idx]["audio_id"]
@@ -342,7 +356,7 @@ class BaseRunner(object):
         from pycocoevalcap.meteor.meteor import Meteor
         from pycocoevalcap.spice.spice import Spice
 
-        scorers = [Bleu(n=4, zh=zh), Rouge(zh=zh), Cider(zh=zh)]
+        scorers = [Bleu(n=4), Rouge(), Cider()]
         if not zh:
             scorers.append(Meteor())
             scorers.append(Spice())

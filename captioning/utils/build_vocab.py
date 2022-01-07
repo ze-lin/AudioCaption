@@ -88,7 +88,7 @@ def build_vocab(input_json: str,
                     tokens = data[audio_idx]["captions"][cap_idx]["tokens"].split()
                     counter.update(tokens)
         else:
-            from captioning.pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
+            from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
             captions = {}
             for audio_idx in range(len(data)):
                 audio_id = data[audio_idx]["audio_id"]

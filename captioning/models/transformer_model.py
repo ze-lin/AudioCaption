@@ -36,6 +36,8 @@ class TransformerModel(CaptionModel):
             "attn_emb_lens": input_dict["attn_emb_lens"]
         }
         t = input_dict["t"]
+        if "labels" in input_dict:
+            decoder_input["labels"] = input_dict["labels"]
         
         ###############
         # determine input word

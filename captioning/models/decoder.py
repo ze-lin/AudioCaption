@@ -659,9 +659,10 @@ class TransformerDecoder(BaseDecoder):
         self.nhead = kwargs.get("nhead", self.d_model // 64)
         self.nlayers = kwargs.get("nlayers", 2)
         self.dim_feedforward = kwargs.get("dim_feedforward", self.d_model * 4)
+        # self.use_label = kwargs.get("use_label", False)
 
         self.pos_encoder = PositionalEncoding(self.d_model, dropout)
-        layer = nn.TransformerDecoderLayer(d_model=self.d_model,
+        layer = nn.TransformerDecoderLayer(d_model=self.d_model, 
                                            nhead=self.nhead,
                                            dim_feedforward=self.dim_feedforward,
                                            dropout=dropout)
@@ -687,7 +688,7 @@ class TransformerDecoder(BaseDecoder):
         return mask
 
     def forward(self, input_dict):
-        word = input_dict["word"]
+        word = input_dict["word"] # index of word embeddings
         attn_embs = input_dict["attn_embs"]
         attn_emb_lens = input_dict["attn_emb_lens"]
         caps_padding_mask = input_dict["caps_padding_mask"]
@@ -698,6 +699,11 @@ class TransformerDecoder(BaseDecoder):
         embed = self.in_dropout(self.word_embedding(word)) * math.sqrt(self.emb_dim) # [N, T, emb_dim]
         # embed = self.word_embedding(word) * math.sqrt(self.emb_dim) # [N, T, emb_dim]
         embed = embed.transpose(0, 1) # [T, N, emb_dim]
+        # if "labels" in input_dict:
+        #     label_embs = input_dict["labels"] # [N, emb_dim]
+        #     # embed += label_embs
+        #     embed = torch.cat( (embed, label_embs.repeat(embed.shape[0], 1, 1)), -1)
+        # import pdb; pdb.set_trace()
         embed = self.pos_encoder(embed)
 
         tgt_mask = self.generate_square_subsequent_mask(embed.size(0)).to(attn_embs.device)
