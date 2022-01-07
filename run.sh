@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0 python captioning/pytorch_runners/run.py train audiocaps_cnn14_rnn_trm.yaml

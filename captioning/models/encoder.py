@@ -41,6 +41,7 @@ class LabelEncoder(nn.Module):
     """
     def __init__(self, emb_dim, vocab_size=527):
         super(LabelEncoder, self).__init__()
+        # self.label_embedding = nn.Parameter(torch.load('label_embs_first_527.pt'), requires_grad=True)
         self.label_embedding = nn.Parameter(torch.randn((vocab_size, emb_dim)),requires_grad=True)
         # self.register_parameter('label_embeddinng', self.label_embedding)
         
