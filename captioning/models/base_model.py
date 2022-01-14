@@ -33,7 +33,7 @@ class CaptionModel(nn.Module):
         self.check_decoder_compatibility()
         self.use_label = kwargs.get("use_label", False)
         if self.use_label:
-            self.label_encoder = LabelEncoder(decoder.attn_emb_dim, 527)
+            self.label_encoder = LabelEncoder(decoder.emb_dim, 527)
         
     def check_decoder_compatibility(self):
         assert isinstance(self.decoder, self.compatible_decoders), \
@@ -78,13 +78,13 @@ class CaptionModel(nn.Module):
         if self.use_label:
             forward_dict["labels"] = self.label_encoder(input_dict["labels"])
             # import pdb; pdb.set_trace()
-            concat_embs = torch.cat( (encoder_output_dict["attn_embs"], \
-                                      forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)), -1)
-            forward_dict["attn_embs"] = concat_embs
-            # add_embs =  encoder_output_dict["attn_embs"] + \
-            #             forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)
-            # forward_dict["attn_embs"] = add_embs
-            encoder_output_dict.pop("attn_embs")
+            # concat_embs = torch.cat( (encoder_output_dict["attn_embs"], \
+            #                           forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)), -1)
+            # forward_dict["attn_embs"] = concat_embs
+            # # add_embs =  encoder_output_dict["attn_embs"] + \
+            # #             forward_dict["labels"].unsqueeze(1).repeat(1, encoder_output_dict["attn_embs"].shape[1], 1)
+            # # forward_dict["attn_embs"] = add_embs
+            # encoder_output_dict.pop("attn_embs")
         
         if input_dict["mode"] == "train":
             forward_dict.update({ "mode": "train", "sample_method": "greedy", "temp": 1.0 })

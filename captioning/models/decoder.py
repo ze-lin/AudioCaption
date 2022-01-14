@@ -669,7 +669,7 @@ class TransformerDecoder(BaseDecoder):
         self.model = nn.TransformerDecoder(layer, self.nlayers)
         self.classifier = nn.Linear(self.d_model, vocab_size)
         self.attn_proj = nn.Sequential(
-            nn.Linear(self.attn_emb_dim * 2, self.d_model),
+            nn.Linear(self.attn_emb_dim, self.d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.LayerNorm(self.d_model)
@@ -699,10 +699,10 @@ class TransformerDecoder(BaseDecoder):
         embed = self.in_dropout(self.word_embedding(word)) * math.sqrt(self.emb_dim) # [N, T, emb_dim]
         # embed = self.word_embedding(word) * math.sqrt(self.emb_dim) # [N, T, emb_dim]
         embed = embed.transpose(0, 1) # [T, N, emb_dim]
-        # if "labels" in input_dict:
-        #     label_embs = input_dict["labels"] # [N, emb_dim]
-        #     # embed += label_embs
-        #     embed = torch.cat( (embed, label_embs.repeat(embed.shape[0], 1, 1)), -1)
+        if "labels" in input_dict:
+            label_embs = input_dict["labels"] # [N, emb_dim]
+            embed += label_embs
+            # embed = torch.cat( (embed, label_embs.repeat(embed.shape[0], 1, 1)), -1)
         # import pdb; pdb.set_trace()
         embed = self.pos_encoder(embed)
 

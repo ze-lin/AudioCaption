@@ -1,5 +1,5 @@
 outputpath: experiments/audiocaps/pre_val
-remark: panns_cnn14_rnn_attnrnn_label_average_concat_memory
+remark: panns_cnn14_rnn_attnrnn_label_average_seq_add_word
 
 data:
     train:

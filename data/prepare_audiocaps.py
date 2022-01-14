@@ -11,7 +11,7 @@ def process(file_name, audioset_wav_df, output_path):
     output_path.mkdir(parents=True, exist_ok=True)
     data = {}
     wav_csv_df = []
-    audioset_wav_df["youtube_id"] = audioset_wav_df["audio_id"].apply(lambda x: x[:11])
+    audioset_wav_df["youtube_id"] = audioset_wav_df["audio_id"].apply(lambda x: x[1:12])
     downloaded_yids = set(audioset_wav_df["youtube_id"].values)
     yid_to_filename = dict(zip(audioset_wav_df["youtube_id"], audioset_wav_df["file_name"]))
     audio_id_to_cur_cap_id = {}

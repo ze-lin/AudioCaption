@@ -70,8 +70,12 @@ class TransformerModel(CaptionModel):
             attn_emb_lens = repeat_tensor(input_dict["attn_emb_lens"][i], beam_size)
             output_i["attn_embs"] = attn_embs
             output_i["attn_emb_lens"] = attn_emb_lens
+            if "labels" in input_dict:
+                output_i["labels"] = repeat_tensor(input_dict["labels"][i], beam_size)
         decoder_input["attn_embs"] = output_i["attn_embs"]
         decoder_input["attn_emb_lens"] = output_i["attn_emb_lens"]
+        if "labels" in input_dict:
+            decoder_input["labels"] = output_i["labels"]
         ###############
         # determine input word
         ################
